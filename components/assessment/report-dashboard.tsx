@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Line,
   LineChart,
@@ -14,6 +14,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import Editor from "@monaco-editor/react";
+import { useTheme } from "next-themes";
 import { ThemeToggle } from "@/components/ui/theme-toggle";
 import {
   loadAssessment,
@@ -147,8 +149,67 @@ export const ReportDashboard = () => {
   }, [selectedQ, selectedQuestion]);
 
   const [frameIndex, setFrameIndex] = useState(0);
+  const [smoothProgress, setSmoothProgress] = useState(0);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [playbackSpeed, setPlaybackSpeed] = useState(1);
+  const animationRef = useRef<number | null>(null);
+  const lastTimeRef = useRef<number>(0);
+  const { resolvedTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const frame =
     replayFrames[Math.min(frameIndex, Math.max(0, replayFrames.length - 1))];
+
+  const editorTheme = mounted ? (resolvedTheme === "dark" ? "vs-dark" : "light") : "light";
+
+  // Smooth progress animation using requestAnimationFrame
+  useEffect(() => {
+    if (isPlaying && replayFrames.length > 0) {
+      lastTimeRef.current = performance.now();
+      
+      const animate = (currentTime: number) => {
+        const deltaTime = currentTime - lastTimeRef.current;
+        lastTimeRef.current = currentTime;
+        
+        setSmoothProgress((prev) => {
+          const increment = (deltaTime / 1000) * playbackSpeed;
+          const newProgress = prev + increment;
+          
+          if (newProgress >= replayFrames.length - 1) {
+            setIsPlaying(false);
+            setFrameIndex(replayFrames.length - 1);
+            return replayFrames.length - 1;
+          }
+          
+          const newFrameIndex = Math.floor(newProgress);
+          if (newFrameIndex !== frameIndex) {
+            setFrameIndex(newFrameIndex);
+          }
+          
+          return newProgress;
+        });
+        
+        animationRef.current = requestAnimationFrame(animate);
+      };
+      
+      animationRef.current = requestAnimationFrame(animate);
+    } else {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    }
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+      }
+    };
+  }, [isPlaying, replayFrames.length, playbackSpeed, frameIndex]);
 
   if (!report || !assessment) {
     return (
@@ -382,23 +443,73 @@ export const ReportDashboard = () => {
             </p>
             {replayFrames.length > 0 ? (
               <div className="mt-2 space-y-2">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setIsPlaying(!isPlaying)}
+                    className="rounded-md border border-line bg-elevated px-3 py-1 text-xs text-muted hover:bg-panel"
+                  >
+                    {isPlaying ? "⏸ Pause" : "▶ Play"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFrameIndex(0);
+                      setSmoothProgress(0);
+                      setIsPlaying(false);
+                    }}
+                    className="rounded-md border border-line bg-elevated px-3 py-1 text-xs text-muted hover:bg-panel"
+                  >
+                    ⏮ Reset
+                  </button>
+                  <select
+                    value={playbackSpeed}
+                    onChange={(e) => setPlaybackSpeed(Number(e.target.value))}
+                    className="rounded-md border border-line bg-elevated px-2 py-1 text-xs text-muted"
+                  >
+                    <option value={0.5}>0.5x</option>
+                    <option value={1}>1x</option>
+                    <option value={2}>2x</option>
+                    <option value={4}>4x</option>
+                    <option value={8}>8x</option>
+                    <option value={16}>16x</option>
+                  </select>
+                  <p className="text-[11px] text-muted">
+                    Frame {frameIndex + 1}/{replayFrames.length} ·{" "}
+                    {frame?.language ?? "-"}
+                  </p>
+                </div>
                 <input
                   type="range"
                   min={0}
                   max={Math.max(0, replayFrames.length - 1)}
-                  value={frameIndex}
-                  onChange={(event) =>
-                    setFrameIndex(Number(event.target.value))
-                  }
+                  step={0.01}
+                  value={isPlaying ? smoothProgress : frameIndex}
+                  onChange={(event) => {
+                    const value = Number(event.target.value);
+                    setFrameIndex(Math.floor(value));
+                    setSmoothProgress(value);
+                    setIsPlaying(false);
+                  }}
                   className="w-full"
                 />
-                <p className="text-[11px] text-muted">
-                  Frame {frameIndex + 1}/{replayFrames.length} ·{" "}
-                  {frame?.language ?? "-"}
-                </p>
-                <pre className="max-h-48 overflow-auto rounded-md border border-line bg-elevated p-2 text-[11px] text-muted">
-                  {frame?.code ?? "No frame"}
-                </pre>
+                <div className="h-48 overflow-hidden rounded-md border border-line">
+                  <Editor
+                    height="100%"
+                    language={frame?.language ?? "javascript"}
+                    value={frame?.code ?? "// No frame"}
+                    theme={editorTheme}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 11,
+                      lineNumbers: "on",
+                      folding: false,
+                      wordWrap: "on",
+                    }}
+                  />
+                </div>
               </div>
             ) : (
               <p className="mt-2 text-xs text-muted">
@@ -431,25 +542,85 @@ export const ReportDashboard = () => {
               <p className="text-xs uppercase tracking-[0.12em] text-soft">
                 You
               </p>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
-                {currentAnswerText}
-              </pre>
+              {selectedQuestion?.kind === "coding" ? (
+                <div className="mt-2 h-48 overflow-hidden rounded border border-line">
+                  <Editor
+                    height="100%"
+                    language={frame?.language ?? "javascript"}
+                    value={currentAnswerText}
+                    theme={editorTheme}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 11,
+                      lineNumbers: "off",
+                      folding: false,
+                      wordWrap: "on",
+                    }}
+                  />
+                </div>
+              ) : (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
+                  {currentAnswerText}
+                </pre>
+              )}
             </article>
             <article className="rounded-md border border-line bg-elevated p-3">
               <p className="text-xs uppercase tracking-[0.12em] text-soft">
                 Candidate B
               </p>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
-                Comparable answer summary with weaker tradeoff reasoning.
-              </pre>
+              {selectedQuestion?.kind === "coding" ? (
+                <div className="mt-2 h-48 overflow-hidden rounded border border-line">
+                  <Editor
+                    height="100%"
+                    language={frame?.language ?? "javascript"}
+                    value="Comparable answer summary with weaker tradeoff reasoning."
+                    theme={editorTheme}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 11,
+                      lineNumbers: "off",
+                      folding: false,
+                      wordWrap: "on",
+                    }}
+                  />
+                </div>
+              ) : (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
+                  Comparable answer summary with weaker tradeoff reasoning.
+                </pre>
+              )}
             </article>
             <article className="rounded-md border border-line bg-elevated p-3">
               <p className="text-xs uppercase tracking-[0.12em] text-soft">
                 Candidate C
               </p>
-              <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
-                Comparable answer summary with stronger edge-case handling.
-              </pre>
+              {selectedQuestion?.kind === "coding" ? (
+                <div className="mt-2 h-48 overflow-hidden rounded border border-line">
+                  <Editor
+                    height="100%"
+                    language={frame?.language ?? "javascript"}
+                    value="Comparable answer summary with stronger edge-case handling."
+                    theme={editorTheme}
+                    options={{
+                      readOnly: true,
+                      minimap: { enabled: false },
+                      scrollBeyondLastLine: false,
+                      fontSize: 11,
+                      lineNumbers: "off",
+                      folding: false,
+                      wordWrap: "on",
+                    }}
+                  />
+                </div>
+              ) : (
+                <pre className="mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-xs text-muted">
+                  Comparable answer summary with stronger edge-case handling.
+                </pre>
+              )}
             </article>
           </div>
         </section>
