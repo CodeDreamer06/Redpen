@@ -1,26 +1,84 @@
 @import "tailwindcss";
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --bg: #f6f5f3;
+  --panel: #ffffff;
+  --elevated: #faf9f8;
+  --ink: #1d1d1f;
+  --muted: #4f5562;
+  --soft: #7b8291;
+  --line: #dedad4;
+  --accent: #a31224;
+  --correct: #1f7a46;
+  --incorrect: #a31224;
+  --warning: #b86a14;
+}
+
+.dark {
+  --bg: #101214;
+  --panel: #15181d;
+  --elevated: #1a1f25;
+  --ink: #e8e7e3;
+  --muted: #b0b5c0;
+  --soft: #8f96a4;
+  --line: #2c3139;
+  --accent: #d83c4f;
+  --correct: #55a878;
+  --incorrect: #ef6778;
+  --warning: #e7a85f;
 }
 
 @theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+  --font-sans: var(--font-headline);
+  --font-mono: var(--font-mono);
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-elevated: var(--elevated);
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-soft: var(--soft);
+  --color-line: var(--line);
+  --color-accent: var(--accent);
+  --color-correct: var(--correct);
+  --color-incorrect: var(--incorrect);
+  --color-warning: var(--warning);
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--bg);
+  background-image:
+    radial-gradient(
+      circle at 10% 10%,
+      color-mix(in srgb, var(--accent) 6%, transparent) 0%,
+      transparent 35%
+    ),
+    radial-gradient(
+      circle at 90% 0%,
+      color-mix(in srgb, var(--line) 36%, transparent) 0%,
+      transparent 28%
+    );
+  color: var(--ink);
+  font-family: var(--font-headline), Georgia, serif;
+}
+
+code,
+pre,
+textarea,
+select,
+button,
+input {
+  font-family: var(--font-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+
+.prose pre {
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--elevated);
+  padding: 0.65rem;
+}
+
+.card-surface {
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg) 8%);
+  box-shadow: 0 1px 0 0 color-mix(in srgb, var(--line) 65%, transparent);
 }
